@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Multi Transfers</title>
+
+    <script src='eosjs/eosjs-api.js'></script>
+    <script src='eosjs/eosjs-jsonrpc.js'></script>
+    <script src='eosjs/eosjs-jssig.js'></script>
+
+    <style>
+        input {
+            margin-bottom:5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Multi-transfer</h1>
+    <p>Your CSV file must be formatted like below, make sure you have the first row with the header</p>
+
+    <pre>
+        account,quantity
+        testaccount,100
+        testacc2,100
+    </pre>
+    <br />
+    <br />
+    <input id="csv_file" type="file" accept="text/csv" />
+
+    <br />
+    <br />
+
+    <label>From</label>
+    <input id="from" type="text" placeholder="from account" value="testaccount1" />
+    <br />
+    <label>Private Key</label>
+    <input id="key" type="text" placeholder="private key" value="5JtUScZK2XEp3g9gh7F8bwtPTRAkASmNrrftmx4AxDKD5K4zDnr" />
+    <br />
+    <label>Endpoint</label>
+    <input id="endpoint" type="text" placeholder="endpoint URL" value="https://eos.greymass.com" />
+    <br />
+
+    <br />
+
+    <button type="submit" onclick="send()">Send Transfers</button>
+
+    <br />
+    <br />
+
+    <pre id="status"></pre>
+
+
+    <script>
+        // TODO: EDITABLE VARIABLES -----------------------------
+        const MAX_TRANSFERS_PER_TRANSACTION = 40;
+        const TOKEN_CONTRACT = `eosio.token`;
+        const TOKEN_SYMBOL = `EOS`;
+        const MEMO = '';
+        // TODO: ------------------------------------------------
+
+
+        async function csvToMap(file){
+            return new Promise(r => {
+                const reader = new FileReader();
+                reader.addEventListener('load', (event) => {
+                    let result = event.target.result;
+                    result = result.split(/\r?\n/)
+                    result.shift();
+                    r(result);
+                });
+                reader.readAsText(file);
+            })
+        }
+
+        async function send(){
+
+            const from = document.getElementById('from').value;
+            const key = document.getElementById('key').value;
+            const endpoint = document.getElementById('endpoint').value;
+            const files = document.getElementById('csv_file').files;
+
+            if(!files || !files.length) return alert("Must select a CSV file");
+
+            const csv = await csvToMap(files[0]);
+            if(!csv || !csv.length) return alert('Invalid CSV, no rows found');
+
+            let transactions = [[]];
+            for(let i = 0; i < csv.length; i++){
+                if(transactions[transactions.length-1].length >= MAX_TRANSFERS_PER_TRANSACTION) transactions.push([]);
+                let slot = transactions[transactions.length-1];
+                if(csv[i].length) {
+                    slot.push(csv[i]);
+                }
+            }
+
+            if(!transactions || !transactions.length || !transactions[0].length) return alert('Invalid CSV, no rows found (2)');
+            if(!from || !from.length) return alert('Invalid from');
+            if(!key || !key.length) return alert('Invalid key');
+            if(!endpoint || !endpoint.length) return alert('Invalid endpoint');
+            const statusElement = document.getElementById('status')
+
+            try {
+                const rpc = new eosjs_jsonrpc.JsonRpc(endpoint);
+                const signatureProvider = new eosjs_jssig.JsSignatureProvider([key]);
+                const api = new eosjs_api.Api({ rpc, signatureProvider });
+
+
+                let i = 0;
+                for(let transaction of transactions){
+                    i++;
+                    statusElement.innerHTML += `Sending transaction #${i} with ${transaction.length} transfers \r\n`
+
+                    const result = await api.transact({
+                        actions: transaction.map(x => {
+                            const [account, quantity] = x.split(',').map(x => x.trim());
+                            return {
+                                // TODO: CHANGE TOKEN ACCOUNT/CONTRACT HERE
+                                account: TOKEN_CONTRACT,
+                                name: 'transfer',
+                                authorization: [{
+                                    actor: from,
+                                    permission: 'active',
+                                }],
+                                data: {
+                                    from: from,
+                                    to: account,
+                                    quantity: `${parseFloat(quantity).toFixed(4)} ${TOKEN_SYMBOL}`,
+                                    memo: MEMO,
+                                },
+                            }
+                        })
+                    }, {
+                        blocksBehind: 3,
+                        expireSeconds: 30,
+                        // sign:false,
+                        // broadcast:false,
+                        useOldRPC:true,
+                        useOldSendRPC:true,
+                    });
+
+                    console.log('result', result);
+                }
+
+            } catch(e) {
+                alert("Error, check console");
+                console.error('You encountered an error!', e);
+            }
+
+            statusElement.innerHTML += `Check the console for transaction results \r\n`
+
+        }
+
+    </script>
+
+
+
+</body>
+</html>
