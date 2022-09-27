@@ -7,6 +7,7 @@
     <script src='eosjs/eosjs-api.js'></script>
     <script src='eosjs/eosjs-jsonrpc.js'></script>
     <script src='eosjs/eosjs-jssig.js'></script>
+    <script src="eosjs/buffer.js"></script>
 
     <style>
         input {
@@ -143,8 +144,8 @@
                 }
 
             } catch(e) {
-                alert("Error, check console");
                 console.error('You encountered an error!', e);
+                alert("Error, check console");
             }
 
             statusElement.innerHTML += `Check the console for transaction results \r\n`
